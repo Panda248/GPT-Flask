@@ -52,42 +52,29 @@ def hello_world():
 def scene_inference():
     prompt = ""
 
-    images = []
-    for _, storage in request.files.items():
-        images.append({
-            "filename": storage.filename,
-            "content_type": storage.content_type,
-            "data": storage.read(),
-        })
+    images = list(request.files.values())
 
     if len(images) != 4:
         return jsonify({"error": "Expected 4 images"}), 400
 
-    text_raw = request.form.get("text") or request.form.get("metadata") or ""
-    try:
-        text_payload = json.loads(text_raw) if text_raw else {}
-    except json.JSONDecodeError:
-        return jsonify({"error": "Invalid JSON for text payload"}), 400
-
+    raw_text = request.form.get("json")
+    text_payload = json.loads(raw_text) if raw_text else None
     payload = {
         "images": images,
         "text": text_payload,
     }
 
     result = scene_agent.invoke({"prompt": prompt, "data": payload})
-    return jsonify(result)
+    jsoned = jsonify(result)
+    return jsoned if jsoned else jsonify({"error": "No result from agent"}), 500
 
 @app.route("/object-inference", methods=["POST"])
 def object_inference():
     prompt = ""
 
-    context_images = request.files.getlist("context")
-    isolated_images = request.files.getlist("isolated")
-
-    if not context_images or not isolated_images:
-        all_images = list(request.files.values())
-        context_images = all_images[:8]
-        isolated_images = all_images[8:16]
+    images = request.files
+    context_images = [images.get(f"context{i}") for i in range(0, 16, 2)]
+    isolated_images = [images.get(f"iso{i}") for i in range(1, 16, 2)]
 
     if len(context_images) != 8 or len(isolated_images) != 8:
         return jsonify({"error": "Expected 8 context and 8 isolated images"}), 400
@@ -112,7 +99,7 @@ def object_inference():
                 return [float(p) for p in parts]
         raise ValueError("Invalid vector")
 
-    raw_meta = request.form.get("metadata")
+    raw_meta = request.form.get("json")
     if raw_meta:
         try:
             meta_payload = json.loads(raw_meta)
@@ -122,9 +109,7 @@ def object_inference():
         scale = meta_payload.get("scale")
         size = meta_payload.get("size")
     else:
-        name = request.form.get("name")
-        scale = request.form.get("scale")
-        size = request.form.get("size")
+        print("nothing from json")
 
     try:
         scale_vec = parse_vector(scale) if scale is not None else None
@@ -143,4 +128,5 @@ def object_inference():
     }
 
     result = object_agent.invoke({"prompt": prompt, "data": payload})
-    return jsonify(result)
+    jsoned = jsonify(result)
+    return jsoned if jsoned else jsonify({"error": "No result from agent"}), 500
