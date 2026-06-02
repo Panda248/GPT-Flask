@@ -64,7 +64,9 @@ def scene_inference():
 
 
 # endpoint for processing object data
-# returns expected object material type
+# returns whether object is heat source
+# Temperature range, material properties (conductive/insulate)
+# heat change over time
 @app.route("/object-inference", methods=["POST"])
 def object_inference():
     prompt = ""
