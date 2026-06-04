@@ -1,66 +1,74 @@
 from flask import Flask, jsonify, request
+from langchain.messages import ContentBlock, HumanMessage
+from langchain.chat_models import init_chat_model
+from dotenv import load_dotenv
+from base64 import b64encode
 import json
 
 app = Flask(__name__)
 
-from langchain.agents import create_agent
-from openai import OpenAI
-
-from dotenv import load_dotenv
-import os
-
-# Load environment variables from .env file
 load_dotenv()
 
-from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
-
-model=init_chat_model("openai:gpt-4o", temperature=0.2)
-
-scene_agent = create_agent(
-    model,
-    system_prompt="Your role is "
-)
-
-object_agent = create_agent(
-    model,
-    system_prompt="Your role is"
-)
+object_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
+scene_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
 
 @app.route("/")
 def hello_world():
     return "<p>Hello, World!</p>"
 
-# Endpoint for processing scene data and producing scene category
+@app.route("/test")
+def test():
+    result = object_model.invoke([HumanMessage(content="Output Hello, World")])
+    return result.content
+
+# Producing scene category
 @app.route("/scene-inference", methods=["POST"])
 def scene_inference():
-    prompt = ""
+    raw_text = request.form["jsonText"] if "jsonText" in request.form else None
+    print(f"raw_text: {raw_text}")
+    text_obj = json.loads(raw_text) if raw_text else None
+    scene_name = text_obj.get("scene_name") if text_obj else None
 
     # print(list(request.files))
-    images = [request.files.get(f"scene{i}") for i in range(1, 5, 1)]
-    # print(images)
-
-    for image in images:
-        if image is not None:
+    images = [
+        img for img in (request.files.get(f"scene{i}") for i in range(1, 5))
+        if img is not None
+    ]
+    
+    if app.config["TESTING"]:
+        for image in images:
             image.save(f"temp_images/scene/{image.filename}") 
 
     if len(images) != 4:
         print("error: expected 4 images but got", len(images))
         return jsonify({"error": "Expected 4 images"}), 400
 
-    raw_text = request.form["jsonText"] if "jsonText" in request.form else None
-    print(f"raw_text: {raw_text}")
-    text_payload = json.loads(raw_text) if raw_text else None
-    payload = {
-        "images": images,
-        "text": text_payload,
-    }
+    prompt = loadPrompt("scene.md", scene_name=scene_name)
+    print(f"prompt: {prompt}")
 
-    result = scene_agent.invoke({"prompt": prompt, "data": payload})
-    jsoned = jsonify(result)
-    if not jsoned:
-        print("error: no result from scene agent")
-    return jsoned if jsoned else jsonify({"error": "No result from agent"}), 500
+    # print(b64encode(request.files["scene1"].read()))
+    # request.files["scene1"].seek(0)
+
+    content :list[ContentBlock]= [{"type": "text", "text": prompt}]
+    for image in images:
+        b64 = b64encode(image.read()).decode("utf-8")
+        content.append({
+            "type": "image",
+            "base64": b64,
+            "mime_type": "image/jpeg"
+        })
+
+    message = HumanMessage(content_blocks=content)
+
+    result = object_model.invoke([message])
+    print(f"result: {result.content}")
+
+    jsoned = jsonify(result.content)
+    
+    for image in images:
+        image.close()
+
+    return jsoned
 
 
 # endpoint for processing object data
@@ -69,38 +77,14 @@ def scene_inference():
 # heat change over time
 @app.route("/object-inference", methods=["POST"])
 def object_inference():
-    prompt = ""
-
-    images = request.files
-    print(list(request.files.values()))
-    context_images = [images.get(f"context{i}") for i in range(1, 9, 1)]
-    isolated_images = [images.get(f"iso{i}") for i in range(1, 9, 1)]
-
-    for image in context_images:
-        if image is not None:
-            image.save(f"temp_images/object/{image.filename}")
-    for image in isolated_images:
-        if image is not None:
-            image.save(f"temp_images/object/{image.filename}")
-
-    print(context_images)
-    print(isolated_images)
-    if len(context_images) != 8 or len(isolated_images) != 8:
-        print("error: expected 8 context and 8 isolated images but got", len(context_images), "context and", len(isolated_images), "isolated")
-        return jsonify({"error": "Expected 8 context and 8 isolated images"}), 400
-    
-    def parse_vector(value):
-        if isinstance(value, list) and len(value) == 3:
-            return [float(x) for x in value]
-        if isinstance(value, str):
-            cleaned = value.strip().lstrip("(").rstrip(")")
-            parts = [p.strip() for p in cleaned.split(",") if p.strip()]
-            if len(parts) == 3:
-                return [float(p) for p in parts]
-        raise ValueError("Invalid vector")
-
+    # Get Textual Information
     raw_meta = request.form.get("jsonText")
-    print(f"raw_meta: {raw_meta}")
+
+    if not raw_meta:
+        print("error: missing jsonText in form data")
+        return jsonify({"error": "Missing jsonText in form data"}), 400
+
+    # print(f"raw_meta: {raw_meta}")
     try:
         meta_payload = json.loads(raw_meta)
     except json.JSONDecodeError:
@@ -109,26 +93,91 @@ def object_inference():
     name = meta_payload.get("name")
     scale = meta_payload.get("scale")
     size = meta_payload.get("size")
+    scene_category = meta_payload.get("scene_category")
+
+    # Get Image Data
+    images = request.files
+    
+    context_images = [
+        img for img in (images.get(f"context{i}") for i in range(1, 9))
+        if img is not None
+    ]
+
+    isolated_images = [
+        img for img in (images.get(f"iso{i}") for i in range(1, 9))
+        if img is not None
+    ]
+
+    if app.config["TESTING"]:
+        for image in context_images:
+            image.save(f"temp_images/object/{image.filename}")
+
+        for image in isolated_images:
+            image.save(f"temp_images/object/{image.filename}")
+
+    if len(context_images) != 8 or len(isolated_images) != 8:
+        print("error: expected 8 context and 8 isolated images but got", len(context_images), "context and", len(isolated_images), "isolated")
+        return jsonify({"error": "Expected 8 context and 8 isolated images"}), 400
+
+    prompt = loadPrompt("object.md", 
+                        user_prompt="", 
+                        object_name=name, 
+                        scale=scale, 
+                        size=size, 
+                        scene_category=scene_category,
+                        len_isolated_images=8,
+                        len_scene=8)
+
+    print(f"prompt: {prompt}")
+
+    content :list[ContentBlock]= [{"type": "text", "text": prompt}]
+    for image in context_images:
+        b64 = b64encode(image.read()).decode("utf-8")
+        content.append({
+            "type": "image",
+            "base64": b64,
+            "mime_type": "image/jpeg"
+        })
+        image.seek(0)
+
+    for image in isolated_images:
+        b64 = b64encode(image.read()).decode("utf-8")
+        content.append({
+            "type": "image",
+            "base64": b64,
+            "mime_type": "image/jpeg"
+        })
+        image.seek(0)
+
+    message = HumanMessage(content_blocks=content);
+
+    result = object_model.invoke([message])
+    print(f"result: {result.content}")
+
+    jsoned = jsonify(result.content)
+
+    for image in context_images + isolated_images:
+        image.close()
+
+    return jsoned
+
+def loadPrompt(filename : str, **kwargs) -> str:
+    with open(f"prompts/{filename}", "r") as f:
+        output = f.read()
+        f.close()
+        return output.format(**kwargs)
+
+
+def parse_vector(value: str) -> list[float]:
+    cleaned = value.strip()
+    if not (cleaned.startswith("(") and cleaned.endswith(")")):
+        raise ValueError("Expected format: (x,y,z)")
+
+    parts = [part.strip() for part in cleaned[1:-1].split(",")]
+    if len(parts) != 3:
+        raise ValueError("Expected three comma-separated numbers")
 
     try:
-        scale_vec = parse_vector(scale) if scale is not None else None
-        size_vec = parse_vector(size) if size is not None else None
-    except ValueError:
-        print("error: invalid scale or size vector")
-        return jsonify({"error": "Invalid scale or size vector"}), 400
-
-    payload = {
-        "context_images": context_images,
-        "isolated_images": isolated_images,
-        "metadata": {
-            "name": name,
-            "scale": scale_vec,
-            "size": size_vec,
-        },
-    }
-
-    result = object_agent.invoke({"prompt": prompt, "data": payload})
-    jsoned = jsonify(result)
-    if not jsoned:
-        print("error: no result from object agent")
-    return jsoned if jsoned else jsonify({"error": "No result from agent"}), 500
+        return [float(part) for part in parts]
+    except ValueError as exc:
+        raise ValueError("All values must be floats") from exc
