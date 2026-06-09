@@ -161,6 +161,92 @@ def object_inference():
 
     return jsoned
 
+@app.route("/object-material-inference", methods=["POST"])
+def object_material_inference():
+    # Get Textual Information
+    raw_meta = request.form.get("jsonText")
+
+    if not raw_meta:
+        print("error: missing jsonText in form data")
+        return jsonify({"error": "Missing jsonText in form data"}), 400
+
+    # print(f"raw_meta: {raw_meta}")
+    try:
+        meta_payload = json.loads(raw_meta)
+    except json.JSONDecodeError:
+        print("error: invalid JSON for metadata")
+        return jsonify({"error": "Invalid JSON for metadata"}), 400
+    name = meta_payload.get("name")
+    scale = meta_payload.get("scale")
+    size = meta_payload.get("size")
+    scene_category = meta_payload.get("scene_category")
+
+    # Get Image Data
+    images = request.files
+    
+    context_images = [
+        img for img in (images.get(f"context{i}") for i in range(1, 9))
+        if img is not None
+    ]
+
+    isolated_images = [
+        img for img in (images.get(f"iso{i}") for i in range(1, 9))
+        if img is not None
+    ]
+
+    if app.config["TESTING"]:
+        for image in context_images:
+            image.save(f"temp_images/object/{image.filename}")
+
+        for image in isolated_images:
+            image.save(f"temp_images/object/{image.filename}")
+
+    if len(context_images) != 8 or len(isolated_images) != 8:
+        print("error: expected 8 context and 8 isolated images but got", len(context_images), "context and", len(isolated_images), "isolated")
+        return jsonify({"error": "Expected 8 context and 8 isolated images"}), 400
+
+    prompt = loadPrompt("objectmaterial.md", 
+                        user_prompt="", 
+                        object_name=name, 
+                        scale=scale, 
+                        size=size, 
+                        scene_category=scene_category,
+                        len_isolated_images=8,
+                        len_scene=8)
+
+    print(f"prompt: {prompt}")
+
+    content :list[ContentBlock]= [{"type": "text", "text": prompt}]
+    for image in context_images:
+        b64 = b64encode(image.read()).decode("utf-8")
+        content.append({
+            "type": "image",
+            "base64": b64,
+            "mime_type": "image/jpeg"
+        })
+        image.seek(0)
+
+    for image in isolated_images:
+        b64 = b64encode(image.read()).decode("utf-8")
+        content.append({
+            "type": "image",
+            "base64": b64,
+            "mime_type": "image/jpeg"
+        })
+        image.seek(0)
+
+    message = HumanMessage(content_blocks=content);
+
+    result = object_model.invoke([message])
+    print(f"result: {result.content}")
+
+    jsoned = jsonify(result.content)
+
+    for image in context_images + isolated_images:
+        image.close()
+
+    return jsoned
+
 def loadPrompt(filename : str, **kwargs) -> str:
     with open(f"prompts/{filename}", "r") as f:
         output = f.read()
