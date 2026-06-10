@@ -1,0 +1,10 @@
+{
+  "object_category": "coffee maker",
+  "object_category_reason": "The name 'KA_CoffeeMaker_V1' and the object's appearance in the images suggest it is a coffee maker, a common kitchen appliance.",
+  "material_category": "plastic",
+  "heat_capacity": 1.5,
+  "thermal_conductivity": 0.2,
+  "mass": 2.0,
+  "initial_temperature": 22,
+  "material_justification": "The coffee maker appears to be made primarily of plastic, which is common for such appliances."
+}
