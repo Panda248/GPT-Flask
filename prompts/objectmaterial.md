@@ -17,9 +17,30 @@ If the object is a boundary surface, it is likely that one axis of {size} is too
 Estimate its material category in 1 word from its isolated images and object category. If the object comprises multiple materials, choose the most dominant material. This material category should be as specific as possible, not a general term. (e.g., 'iron' or 'steel' should be used rather than 'metal' in terms of concreteness). If the object is not authentic, estimate the material category based on the object's authenticity. If the sobject seems like a boundary surface and is textureless, estimate the material that is likely to be present in the {scene_category} based on its surface color.
 
 Now, determine the following material properties based on your estimates.
-Heat capacity in joules per gram, thermal conductivity in watts per meter celsius, total mass of the object in kilograms, and the initial temperature of the object in celsius.
+Heat capacity in joules per gram, thermal conductivity in watts per meter celsius, total mass of the object in grams and the initial temperature of the object in celsius. 
+Give these properties in decimal format. If it is a whole number, add a trailing 0 (i.e. 1.0 rather than 1)
+Additionally, determine whether or not the object could be a heat source. If so, estimate its in heat generation rate in joules per second as well as whether the object can be turned on/off and if it is initially on at the beginning of the scene. If you determined the object cannot be a heat source, leave heat generation rate as 0.
 
-Estimate heat capacity in joules per gram, thermal Conductivity in watts per meter celsius, total mass of the object in kilograms, and initial temperature of the object given the scene category {scene_category}. Additionally provide a short justification sentence as to why you chose these values
-Provide these numerical values in a JSON format without any affixes or units. All structured output should be provided. If you cannot estimate all or parts of the material properties for some reason, assign 0 for those values.
+If you cannot estimate all or parts of the material properties for some reason, assign 0 for those values.
 
-Provide the object category and its reason, material category, heat capacity, thermal conductivity, mass, initial temperature, and material justification in plaintext JSON format without any affixes (like markdown wrappers). All structured outputs should be provided.
+Additionally, provide brief reasons for the object category, material, heat generation rate, and whether or not it is a heat source.
+
+Provide the object category, object category justification, material category, material category justification, whether or not its a heat source, justification for why it is or isnt a heat source, heat generation rate, heat generation rate justification, toggleable, initially on, heat capacity, thermal conductivity, mass, initial temperature, and material justification in plaintext JSON format without any affixes (e.g. markdown wrappers). All structured outputs should be provided.
+
+Example output:
+{{
+  "object_category": "coffee maker",
+  "object_category_justification": "The name 'KA_CoffeeMaker_V1' and the object's appearance in the images suggest it is a coffee maker, which is common in kitchens.",
+  "material_category": "plastic",
+  "material_category_justification": "The isolated images show a texture and color typical of plastic, which is common for coffee makers.",
+  "is_heat_source": true,
+  "heat_source_justification": "Coffee makers are typically heat sources as they heat water to brew coffee.",
+  "heat_generation_rate": 1000.0,
+  "heat_generation_rate_justification": "A typical coffee maker generates around 1000 watts (joules per second) when in use.",
+  "toggleable": true,
+  "initially_on": false,
+  "heat_capacity": 1.5,
+  "thermal_conductivity": 0.2,
+  "mass": 2000.0,
+  "initial_temperature": 20
+}}
