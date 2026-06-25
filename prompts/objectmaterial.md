@@ -21,11 +21,11 @@ Heat capacity in joules per gram, thermal conductivity in watts per meter celsiu
 Give these properties in decimal format. If it is a whole number, add a trailing 0 (i.e. 1.0 rather than 1)
 Additionally, determine whether or not the object could be a heat source. If so, estimate its in heat generation rate in joules per second as well as whether the object can be turned on/off and if it is initially on at the beginning of the scene. If you determined the object cannot be a heat source, leave heat generation rate as 0.
 
-If you cannot estimate all or parts of the material properties for some reason, assign 0 for those values.
+If you cannot estimate all or parts of the material properties for some reason, assign 0 for those values. Do not do this for mass or specific heat as these are not possible.
 
 Additionally, provide brief reasons for the object category, material, heat generation rate, and whether or not it is a heat source.
 
-Provide the object category, object category justification, material category, material category justification, whether or not its a heat source, justification for why it is or isnt a heat source, heat generation rate, heat generation rate justification, toggleable, initially on, heat capacity, thermal conductivity, mass, initial temperature, and material justification in plaintext JSON format without any affixes (e.g. markdown wrappers). All structured outputs should be provided.
+Provide the object category, object category justification, material category, material category justification, whether or not its a heat source, justification for why it is or isnt a heat source, heat generation rate, heat generation rate justification, toggleable, initially on, heat capacity, thermal conductivity, mass, initial temperature, and material justification in plaintext JSON format without any affixes (e.g. markdown wrappers like ```json). All structured outputs should be provided.
 
 Example output:
 {{
@@ -42,5 +42,5 @@ Example output:
   "heat_capacity": 1.5,
   "thermal_conductivity": 0.2,
   "mass": 2000.0,
-  "initial_temperature": 20
+  "initial_temperature": 20.0
 }}
