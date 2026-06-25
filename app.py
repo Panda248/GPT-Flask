@@ -4,6 +4,7 @@ from langchain.messages import AIMessage, ContentBlock, HumanMessage
 from langchain.chat_models import init_chat_model
 from dotenv import load_dotenv
 from base64 import b64encode
+from cacher import Cacher
 import json
 
 
@@ -13,6 +14,8 @@ load_dotenv()
 
 object_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
 scene_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
+cacher = Cacher(cache_file="cache.json")
+
 
 def get_images_from_request(prefix: str, count: int) -> list:
     images = [
@@ -99,7 +102,8 @@ def scene_inference():
         print("error: invalid JSON for metadata")
         return Response("Invalid JSON for metadata", 
                         status=400, mimetype="text/plain")
-    scene_name = data_obj.scene_name if "scene_name" in data_obj else None
+    print(f"data_obj: {data_obj}")
+    scene_name = data_obj["name"] if "name" in data_obj else None
 
     images = get_images_from_request("scene", 4)
     save_images_if_testing(images, "scene")
@@ -110,14 +114,22 @@ def scene_inference():
 
     prompt = loadPrompt("scene.md", scene_name=scene_name)
     # print(f"prompt: {prompt}")
+    
+    if cacher.get(f"SCENE_{scene_name}"):
+        print(f"cache hit for scene_name: {scene_name}")
+        result = AIMessage(content=cacher.get(f"SCENE_{scene_name}"))
+    else :
+        print(f"cache miss for scene_name: {scene_name}, invoking model")
+        message = HumanMessage(
+            content_blocks=construct_content_blocks(prompt, images)
+        ) 
+        result = (
+            object_model.invoke([message])
+            if not app.config["DEBUG"] else AIMessage(content="kitchen") 
+        )
+        if not app.config["DEBUG"]:
+            cacher.add(f"SCENE_{scene_name}", result.content)
 
-    message = HumanMessage(
-        content_blocks=construct_content_blocks(prompt, images)
-    ) 
-    result = (
-        object_model.invoke([message])
-        if not app.config["DEBUG"] else AIMessage(content="kitchen") 
-    )
     print(f"result: {result.content}")
 
     close_images(images)
@@ -171,13 +183,20 @@ def object_material_inference():
 
     message = HumanMessage(content_blocks=
         construct_content_blocks(prompt, context_images + isolated_images));
-    result = (
-        object_model.invoke([message]) 
-        if not app.config["DEBUG"] 
-        else AIMessage(
-            content=open("object_material_stub.json").read()
+    
+    if cacher.get(f"OBJECT_{name}_{scene_category}"):
+        print(f"cache hit for object: {name} in scene_category: {scene_category}")
+        result = AIMessage(content=cacher.get(f"OBJECT_{name}_{scene_category}"))
+    else :
+        result = (
+            object_model.invoke([message]) 
+            if not app.config["DEBUG"] 
+            else AIMessage(
+                content=open("object_material_stub.json").read()
+            )
         )
-    )
+        if not app.config["DEBUG"]:
+            cacher.add(f"OBJECT_{name}_{scene_category}", result.content)
     print(f"result: {result.content}")
 
     close_images(context_images + isolated_images)
