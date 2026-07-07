@@ -13,7 +13,7 @@ app = Flask(__name__)
 load_dotenv()
 
 object_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
-scene_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
+# scene_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
 cacher = Cacher(cache_file="cache.json")
 
 
@@ -69,7 +69,7 @@ def parse_vector(value: str) -> list[float]:
 
 
 def create_response(message: AIMessage) -> Response:
-    return Response(message.text, status=200, mimetype="application/json")
+    return Response(message.text, status=200, mimetype="text/plain")
 
 
 def close_images(images: list[FileStorage]):

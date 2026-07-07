@@ -4,7 +4,11 @@ import json
 class Cacher:
     def __init__(self, cache_file="cache.json"):
         self.cache_file = cache_file
-        self.cache = json.load(open(self.cache_file, "r"))
+        try:
+            with open(self.cache_file, "r") as cache_handle:
+                self.cache = json.load(cache_handle)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.cache = {}
 
     def get(self, key):
         return self.cache.get(key)
@@ -13,4 +17,3 @@ class Cacher:
         self.cache[key] = value
         with open(self.cache_file, "w") as f:
             json.dump(self.cache, f)
-            f.close()

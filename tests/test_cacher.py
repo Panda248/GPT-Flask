@@ -1,4 +1,9 @@
-from cacher import Cacher
+import os
+import sys
+
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 
 def loadCache():
     from cacher import Cacher
