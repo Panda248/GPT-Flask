@@ -14,12 +14,13 @@ Position information can be used to estimate the object category,  especially if
 Do not estimate the object category from the light and reflective conditions because the images are taken from various lighting conditions.
 
 If the object is a boundary surface, it is likely that one axis of {size} is too small in Unity. In that case, estimate the object size by replacing only that axis value witha  typical value for the object category in meters and provide a reason in one sentence. Return the same value as {size} for the estimated size in the other cases. Not that you should return the value in a string format like '1.0,1.0,1.0'. For example, if the thickness of the room floor is too small, replace it with a typical value for the room floor.
-Estimate its material category in 1 word from its isolated images and object category. If the object comprises multiple materials, choose the most dominant material. This material category should be as specific as possible, not a general term. (e.g., 'iron' or 'steel' should be used rather than 'metal' in terms of concreteness). If the object is not authentic, estimate the material category based on the object's authenticity. If the sobject seems like a boundary surface and is textureless, estimate the material that is likely to be present in the {scene_category} based on its surface color.
+Estimate its material category in 1 word from its isolated images and object category. If the object comprises multiple materials, choose the most dominant material. This material category should be as specific as possible, not a general term. (e.g., 'iron' or 'steel' should be used rather than 'metal' in terms of concreteness). If the object is not authentic, estimate the material category based on the object's authenticity. If the object seems like a boundary surface and is textureless, estimate the material that is likely to be present in the {scene_category} based on its surface color.
 
 Now, determine the following material properties based on your estimates.
 Heat capacity in joules per gram, thermal conductivity in watts per meter celsius, total mass of the object in grams and the initial temperature of the object in celsius. 
+When determining the initial temperature, the object name should be considered as well when applicable (e.g. a temperature is given in the object name).
 Give these properties in decimal format. If it is a whole number, add a trailing 0 (i.e. 1.0 rather than 1)
-Additionally, determine whether or not the object could be a heat source. If so, estimate its in heat generation rate in joules per second as well as whether the object can be turned on/off and if it is initially on at the beginning of the scene. If you determined the object cannot be a heat source, leave heat generation rate as 0.
+Additionally, determine whether or not the object could generate heat. If so, estimate its heat generation rate in joules per second as well as whether the object can be turned on/off and if it is initially on at the beginning of the scene. If you determined the object cannot generate heat, leave heat generation rate as 0.
 
 If you cannot estimate all or parts of the material properties for some reason, assign 0 for those values. Do not do this for mass or specific heat as these are not possible.
 
@@ -37,7 +38,6 @@ Example output:
   "heat_source_justification": "Coffee makers are typically heat sources as they heat water to brew coffee.",
   "heat_generation_rate": 1000.0,
   "heat_generation_rate_justification": "A typical coffee maker generates around 1000 watts (joules per second) when in use.",
-  "toggleable": true,
   "initially_on": false,
   "heat_capacity": 1.5,
   "thermal_conductivity": 0.2,
