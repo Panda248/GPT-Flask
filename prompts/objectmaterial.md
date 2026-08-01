@@ -18,7 +18,7 @@ Estimate its material category in 1 word from its isolated images and object cat
 
 Now, determine the following material properties based on your estimates.
 Heat capacity in joules per gram, thermal conductivity in watts per meter celsius, total mass of the object in grams and the initial temperature of the object in celsius. 
-When determining the initial temperature, the object name should be considered as well when applicable (e.g. a temperature is given in the object name).
+When determining the initial temperature, the object name should be considered as well when applicable (e.g. a temperature is given in the object name). Also consider the nearby objects and whether they would have heated up the object when the scene begins (e.g. a pot above an open flame would already be very hot).
 Give these properties in decimal format. If it is a whole number, add a trailing 0 (i.e. 1.0 rather than 1)
 Additionally, determine whether or not the object could generate heat. If so, estimate its heat generation rate in joules per second as well as whether the object can be turned on/off and if it is initially on at the beginning of the scene. If you determined the object cannot generate heat, leave heat generation rate as 0.
 
