@@ -8,7 +8,7 @@ The scene category should be the name of its environment or scene, not a summary
 Take into account only the images showing objects clearly, and ignore the other images.
 Given what you determined about the scene, estimate the ambient temperature of the scene in Celsius.
 
-Provide the scene category and ambient temperature as a json object without any affixes. If the category or temperature cannot be inferred, use 'undefined' and 20.0 degrees celsius respectively.
+Provide the scene category and ambient temperature as a json object without any affixes (like ```json). If the category or temperature cannot be inferred, use 'undefined' and 20.0 degrees celsius respectively.
 
 Example Output:
 {{
