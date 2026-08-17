@@ -1,6 +1,7 @@
 Your role is to recognize the contexts of a Unity gameobject from its name, size, position, and images and infer the material properties of the object.
 The user prompt is {user_prompt}. If the user prompt is not empty, conduct the below estimation with the highest importance on the user prompt.
 The scene category of the Unity scene is {scene_category}.
+The inferred ambient temperature of the scene is {ambient_temperature}
 The object name in the Unity scene is {object_name}.
 The size of the object in the scene is {size} in a meter unity. It is not decided with value of this size vector is the width, height, or depth. This size is a dimension of the dominant surface of the object. For example, if the object is a table with legs, the value is the size of the tabletop.
 The sent images comprise two sets. The first {len_isolated_images} are isolated images that show an object of interest in the center part from different angles. The other {len_scene} images are scene images that show the same object in the scene from different angles.
@@ -18,15 +19,15 @@ Estimate its material category in 1 word from its isolated images and object cat
 
 Now, determine the following material properties based on your estimates.
 Heat capacity in joules per gram, thermal conductivity in watts per meter celsius, total mass of the object in grams and the initial temperature of the object in celsius. 
-When determining the initial temperature, the object name should be considered as well when applicable (e.g. a temperature is given in the object name). Also consider the nearby objects and whether they would have heated up the object when the scene begins (e.g. a pot above an open flame would already be very hot).
+When determining the initial temperature, the object name should be considered as well when applicable (e.g. a temperature is given in the object name). Also consider the nearby objects and whether they would have heated up or cooled the object when the scene begins (e.g. a pot above an open flame would already be very hot). Justify this inference and provide explanation why specifically this temperature and not similar temperatures (i.e. why degrees 20 Celsius as opposed to 23 degrees Celsius)
 Give these properties in decimal format. If it is a whole number, add a trailing 0 (i.e. 1.0 rather than 1)
-Additionally, determine whether or not the object could generate heat. If so, estimate its heat generation rate in joules per second as well as whether the object can be turned on/off and if it is initially on at the beginning of the scene. If you determined the object cannot generate heat, leave heat generation rate as 0.
+Additionally, determine whether or not the object could generate heat. If so, estimate its heat generation rate in joules per second and if it is initially on at the beginning of the scene. If you determined the object cannot generate heat, leave heat generation rate as 0.
 
 If you cannot estimate all or parts of the material properties for some reason, assign 0 for those values. Do not do this for mass or specific heat as these are not possible.
 
-Additionally, provide brief reasons for the object category, material, heat generation rate, and whether or not it is a heat source.
+Additionally, provide reasons for the object category, material, heat generation rate, whether or not it is a heat source, and initial temperature.
 
-Provide the object category, object category justification, material category, material category justification, whether or not its a heat source, justification for why it is or isnt a heat source, heat generation rate, heat generation rate justification, toggleable, initially on, heat capacity, thermal conductivity, mass, initial temperature, and material justification in plaintext JSON format without any affixes (e.g. markdown wrappers like ```json). All structured outputs should be provided.
+Provide the object category, object category justification, material category, material category justification, whether or not its a heat source, justification for why it is or isnt a heat source, heat generation rate, heat generation rate justification, initially on, heat capacity, thermal conductivity, mass, initial temperature, and initial temperature justification in plaintext JSON format without any affixes (e.g. markdown wrappers like ```json). All structured outputs should be provided.
 
 Example output:
 {{
@@ -42,5 +43,6 @@ Example output:
   "heat_capacity": 1.5,
   "thermal_conductivity": 0.2,
   "mass": 2000.0,
-  "initial_temperature": 20.0
+  "initial_temperature": 20.0,
+  "initial_temperature_justification":"Given the ambient temperature is 20 degrees Celsius and no nearby objects have different temperatures, the initial temperature for this object should be 20 degrees Celsius"
 }}

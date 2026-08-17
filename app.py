@@ -1,11 +1,16 @@
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, request
 from werkzeug.datastructures import FileStorage
+from werkzeug.utils import secure_filename
 from langchain.messages import AIMessage, ContentBlock, HumanMessage
 from langchain.chat_models import init_chat_model
 from dotenv import load_dotenv
 from base64 import b64encode
 from cacher import Cacher
+import csv
+import os
 import json
+from datetime import datetime, timezone
+from uuid import uuid4
 
 
 app = Flask(__name__)
@@ -15,6 +20,8 @@ load_dotenv()
 object_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
 # scene_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
 cacher = Cacher(cache_file="cache.json")
+request_log_file = os.path.join(app.root_path, "request_log.csv")
+request_images_root = os.path.join(app.root_path, "request_images")
 
 
 def get_images_from_request(prefix: str, count: int) -> list:
@@ -30,6 +37,7 @@ def save_images_if_testing(images: list[FileStorage], prefix: str):
     if app.config["DEBUG"]:
         for image in images:
             image.save(f"temp_images/{prefix}/{image.filename}")
+            image.seek(0)
 
 
 def construct_content_blocks(prompt: str, 
@@ -68,8 +76,62 @@ def parse_vector(value: str) -> list[float]:
         raise ValueError("All values must be floats") from exc
 
 
-def create_response(message: AIMessage) -> Response:
-    return Response(message.text, status=200, mimetype="text/plain")
+def save_request_images(request_type: str, images: list[FileStorage]) -> list[str]:
+    if not images:
+        return []
+
+    safe_request_type = request_type.replace(" ", "_")
+    request_dir = os.path.join(request_images_root, safe_request_type)
+    os.makedirs(request_dir, exist_ok=True)
+
+    request_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    request_id = f"{request_stamp}_{uuid4().hex[:8]}"
+    saved_paths: list[str] = []
+
+    for index, image in enumerate(images, start=1):
+        filename = secure_filename(image.filename or f"image_{index}.jpg")
+        if not filename:
+            filename = f"image_{index}.jpg"
+
+        saved_filename = f"{request_id}_{index}_{filename}"
+        saved_path = os.path.join(request_dir, saved_filename)
+        image.save(saved_path)
+        image.seek(0)
+        saved_paths.append(os.path.relpath(saved_path, app.root_path))
+
+    return saved_paths
+
+
+def build_request_content(raw: str | None, image_paths: list[str]) -> str:
+    payload = {"jsonText": raw, "images": image_paths}
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def coerce_response_content(response_content) -> str:
+    if isinstance(response_content, str):
+        try:
+            parsed_content = json.loads(response_content)
+        except (TypeError, json.JSONDecodeError):
+            return response_content
+        return json.dumps(parsed_content, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(response_content, ensure_ascii=False, separators=(",", ":"))
+
+
+def append_request_log(request_type: str, request_content: str,
+                       response_content: str):
+    file_exists = os.path.exists(request_log_file)
+    with open(request_log_file, "a", newline="", encoding="utf-8") as log_file:
+        writer = csv.writer(log_file)
+        if not file_exists or os.path.getsize(request_log_file) == 0:
+            writer.writerow(["request-type", "request content", "response content"])
+        writer.writerow([request_type, request_content, response_content])
+
+
+def create_logged_response(request_type: str, request_content: str,
+                           response_content: str, status: int = 200,
+                           mimetype: str = "text/plain") -> Response:
+    append_request_log(request_type, request_content, response_content)
+    return Response(response_content, status=status, mimetype=mimetype)
 
 
 def close_images(images: list[FileStorage]):
@@ -94,23 +156,39 @@ def scene_inference():
     raw = request.form["jsonText"] if "jsonText" in request.form else None
     if not raw:
         print("error: missing jsonText in form data")
-        return Response("Missing jsonText in form data", 
-                        status=400, mimetype="text/plain")
+        return create_logged_response(
+            "scene inference",
+            "",
+            "Missing jsonText in form data",
+            status=400,
+            mimetype="text/plain",
+        )
     try:
         data_obj = json.loads(raw)
     except json.JSONDecodeError:
         print("error: invalid JSON for metadata")
-        return Response("Invalid JSON for metadata", 
-                        status=400, mimetype="text/plain")
+        return create_logged_response(
+            "scene inference",
+            raw,
+            "Invalid JSON for metadata",
+            status=400,
+            mimetype="text/plain",
+        )
     print(f"data_obj: {data_obj}")
     scene_name = data_obj["name"] if "name" in data_obj else None
 
     images = get_images_from_request("scene", 4)
     save_images_if_testing(images, "scene")
+    request_content = build_request_content(raw, save_request_images("scene inference", images))
     if len(images) != 4:
         print(f"error: expected 4 images but got {len(images)}")
-        return Response(f"Expected 4 images, got {len(images)}", 
-                        status=400, mimetype="text/plain")
+        return create_logged_response(
+            "scene inference",
+            request_content,
+            f"Expected 4 images, got {len(images)}",
+            status=400,
+            mimetype="text/plain",
+        )
 
     prompt = loadPrompt("scene.md", scene_name=scene_name)
     # print(f"prompt: {prompt}")
@@ -133,7 +211,13 @@ def scene_inference():
     print(f"result: {result.content}")
 
     close_images(images)
-    return create_response(result)
+    return create_logged_response(
+        "scene inference",
+        request_content,
+        coerce_response_content(result.content),
+        status=200,
+        mimetype="text/plain",
+    )
 
 
 @app.route("/object-material-inference", methods=["POST"])
@@ -142,17 +226,31 @@ def object_material_inference():
     print(f"raw jsonText: {raw}")
     if not raw:
         print("error: missing jsonText in form data")
-        return Response("Missing jsonText in form data", 
-                        status=400, mimetype="text/plain")
+        return create_logged_response(
+            "object inference",
+            "",
+            "Missing jsonText in form data",
+            status=400,
+            mimetype="text/plain",
+        )
     try:
         data_obj = json.loads(raw)
     except json.JSONDecodeError:
         print("error: invalid JSON for metadata")
-        return Response("Invalid JSON for metadata", 
-                        status=400, mimetype="text/plain")
+        return create_logged_response(
+            "object inference",
+            raw,
+            "Invalid JSON for metadata",
+            status=400,
+            mimetype="text/plain",
+        )
     name = data_obj["name"] if "name" in data_obj else None
     scale = data_obj["scale"] if "scale" in data_obj else None
     size = data_obj["size"] if "size" in data_obj else None
+    ambient_temperature = (
+        data_obj["ambient_temperature"] if "ambient_temperature" in data_obj
+        else None
+    )
     scene_category = (
         data_obj["scene_category"] if "scene_category" in data_obj else None
     )
@@ -160,16 +258,24 @@ def object_material_inference():
     isolated_images = get_images_from_request("iso", 8)
     save_images_if_testing(context_images, "object")
     save_images_if_testing(isolated_images, "object")
+    request_content = build_request_content(
+        raw,
+        save_request_images("object inference", context_images + isolated_images),
+    )
 
     if len(context_images) != 8 or len(isolated_images) != 8:
         print("error: expected 8 context and 8 isolated images but got "
               f" {len(context_images)} context and "
               f"{len(isolated_images)} isolated")
-        return Response("error: Expected 8 context and 8 isolated images "
-                        f"but got {len(context_images)} context and "
-                        f"{len(isolated_images)} isolated",
-                        status=400,
-                        mimetype="text/plain")
+        return create_logged_response(
+            "object inference",
+            request_content,
+            "error: Expected 8 context and 8 isolated images "
+            f"but got {len(context_images)} context and "
+            f"{len(isolated_images)} isolated",
+            status=400,
+            mimetype="text/plain",
+        )
 
     prompt = loadPrompt("objectmaterial.md", 
                         user_prompt="", 
@@ -177,6 +283,7 @@ def object_material_inference():
                         scale=scale, 
                         size=size, 
                         scene_category=scene_category,
+                        ambient_temperature=ambient_temperature,
                         len_isolated_images=8,
                         len_scene=8)
     # print(f"prompt: {prompt}")
@@ -200,5 +307,11 @@ def object_material_inference():
     print(f"result: {result.content}")
 
     close_images(context_images + isolated_images)
-    return Response(result.text, status=200, mimetype="application/json")
+    return create_logged_response(
+        "object inference",
+        request_content,
+        coerce_response_content(result.content),
+        status=200,
+        mimetype="application/json",
+    )
 
