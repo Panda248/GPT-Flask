@@ -17,11 +17,20 @@ app = Flask(__name__)
 
 load_dotenv()
 
+
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
 object_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
 # scene_model=init_chat_model("openai:gpt-4o", temperature=0.2, max_tokens=1024)
 cacher = Cacher(cache_file="cache.json")
 request_log_file = os.path.join(app.root_path, "request_log.csv")
 request_images_root = os.path.join(app.root_path, "request_images")
+enable_request_logging = env_flag("ENABLE_REQUEST_LOGGING", default=False)
+enable_caching = env_flag("ENABLE_CACHING", default=True)
 
 
 def get_images_from_request(prefix: str, count: int) -> list:
@@ -77,7 +86,7 @@ def parse_vector(value: str) -> list[float]:
 
 
 def save_request_images(request_type: str, images: list[FileStorage]) -> list[str]:
-    if not images:
+    if not enable_request_logging or not images:
         return []
 
     safe_request_type = request_type.replace(" ", "_")
@@ -119,6 +128,9 @@ def coerce_response_content(response_content) -> str:
 
 def append_request_log(request_type: str, request_content: str,
                        response_content: str):
+    if not enable_request_logging:
+        return
+
     file_exists = os.path.exists(request_log_file)
     with open(request_log_file, "a", newline="", encoding="utf-8") as log_file:
         writer = csv.writer(log_file)
@@ -193,9 +205,10 @@ def scene_inference():
     prompt = loadPrompt("scene.md", scene_name=scene_name)
     # print(f"prompt: {prompt}")
     
-    if cacher.get(f"SCENE_{scene_name}"):
+    cached_scene = cacher.get(f"SCENE_{scene_name}") if enable_caching else None
+    if cached_scene:
         print(f"cache hit for scene_name: {scene_name}")
-        result = AIMessage(content=cacher.get(f"SCENE_{scene_name}"))
+        result = AIMessage(content=cached_scene)
     else :
         print(f"cache miss for scene_name: {scene_name}, invoking model")
         message = HumanMessage(
@@ -205,7 +218,7 @@ def scene_inference():
             object_model.invoke([message])
             if not app.config["DEBUG"] else AIMessage(content="kitchen") 
         )
-        if not app.config["DEBUG"]:
+        if enable_caching and not app.config["DEBUG"]:
             cacher.add(f"SCENE_{scene_name}", result.content)
 
     print(f"result: {result.content}")
@@ -291,9 +304,13 @@ def object_material_inference():
     message = HumanMessage(content_blocks=
         construct_content_blocks(prompt, context_images + isolated_images));
     
-    if cacher.get(f"OBJECT_{name}_{scene_category}"):
-        print(f"cache hit for object: {name} in scene_category: {scene_category}")
-        result = AIMessage(content=cacher.get(f"OBJECT_{name}_{scene_category}"))
+    cache_key = f"OBJECT_{name}_{scene_category}"
+    cached_object_material = cacher.get(cache_key) if enable_caching else None
+    if cached_object_material:
+        print(
+            f"cache hit for object: {name} in scene_category: {scene_category}"
+        )
+        result = AIMessage(content=cached_object_material)
     else :
         result = (
             object_model.invoke([message]) 
@@ -302,8 +319,8 @@ def object_material_inference():
                 content=open("object_material_stub.json").read()
             )
         )
-        if not app.config["DEBUG"]:
-            cacher.add(f"OBJECT_{name}_{scene_category}", result.content)
+        if enable_caching and not app.config["DEBUG"]:
+            cacher.add(cache_key, result.content)
     print(f"result: {result.content}")
 
     close_images(context_images + isolated_images)
